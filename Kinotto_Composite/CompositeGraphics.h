@@ -315,6 +315,61 @@ void drawWireframeCube(float angleX, float angleY, float angleZ, int cx, int cy,
     line(proj[2][0], proj[2][1], proj[6][0], proj[6][1], color);
     line(proj[3][0], proj[3][1], proj[7][0], proj[7][1], color);
   }
+
+  void drawWireFrameSphere(float angleX, float angleY, float angleZ, int cx, int cy, int size, char color) {
+    // 12 Vertices of an Icosahedron (Low-poly sphere)
+    // We use the Golden Ratio to mathematically calculate perfectly spaced points
+    const float a = 0.525731f; 
+    const float b = 0.850651f; 
+
+    float verts[12][3] = {
+      {-a,  b,  0}, { a,  b,  0}, {-a, -b,  0}, { a, -b,  0},
+      { 0, -a,  b}, { 0,  a,  b}, { 0, -a, -b}, { 0,  a, -b},
+      { b,  0, -a}, { b,  0,  a}, {-b,  0, -a}, {-b,  0,  a}
+    };
+
+    // 30 Edges connecting the vertices
+    int edges[30][2] = {
+      {0,1}, {0,5}, {0,7}, {0,10}, {0,11},
+      {1,5}, {1,7}, {1,8},  {1,9},
+      {2,3}, {2,4}, {2,6},  {2,10}, {2,11},
+      {3,4}, {3,6}, {3,8},  {3,9},
+      {4,5}, {4,9}, {4,11},
+      {5,9}, {5,11},
+      {6,7}, {6,8}, {6,10},
+      {7,8}, {7,10},
+      {8,9}, {10,11}
+    };
+
+    int proj[12][2]; 
+
+    // 1. Rotate and Project the 12 vertices
+    for (int i = 0; i < 12; i++) {
+      float x = verts[i][0], y = verts[i][1], z = verts[i][2];
+      
+      // 3D Rotations
+      float y_rotX = y * cos(angleX) - z * sin(angleX);
+      float z_rotX = y * sin(angleX) + z * cos(angleX);
+      float x_rotY = x * cos(angleY) + z_rotX * sin(angleY);
+      float z_rotY = -x * sin(angleY) + z_rotX * cos(angleY);
+      float x_rotZ = x_rotY * cos(angleZ) - y_rotX * sin(angleZ);
+      float y_rotZ = x_rotY * sin(angleZ) + y_rotX * cos(angleZ);
+      
+      // Perspective
+      float z_perspective = z_rotY + 2.5;
+
+      proj[i][0] = cx + (int)((x_rotZ / z_perspective) * size);
+      proj[i][1] = cy + (int)((y_rotZ / z_perspective) * size);
+    }
+
+    // 2. Draw the 30 connecting lines
+    for (int i = 0; i < 30; i++) {
+      int p1 = edges[i][0];
+      int p2 = edges[i][1];
+      line(proj[p1][0], proj[p1][1], proj[p2][0], proj[p2][1], color);
+    }
+  }
+
   void line(int x1, int y1, int x2, int y2, char color)
   {
     int x, y, xe, ye;

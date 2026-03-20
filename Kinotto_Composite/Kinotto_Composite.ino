@@ -12,40 +12,7 @@
 //NTSC MAX, half: 324x224 full: 648x448
 const int XRES = 320;
 const int YRES = 225;
-char *KINOTTO[] = {
-  " FAMMI UN K______ GIGANTE\n",
-  " FAMMI UN KA_____ GIGANTE\n",
-  " FAMMI UN K______ GIGANTE\n",
-  " FAMMI UN KI_____ GIGANTE\n",
-  " FAMMI UN KIN____ GIGANTE\n",
-  " FAMMI UN KINO___ GIGANTE\n",
-  " FAMMI UN KINOR__ GIGANTE\n",
-  " FAMMI UN KINORT_ GIGANTE\n",
-  " FAMMI UN KINO___ GIGANTE\n",
-  " FAMMI UN KINOT__ GIGANTE\n",
-  " FAMMI UN KINOTT_ GIGANTE\n",
-  " FAMMI UN KINOTTO GIGANTE\n",
-  "  "
-};
-char* ascii_title[] = {
-
-" \n\n\n __  _  ____  ____    ___   ______  ______   ___  \n",
-" |  l/ ]l    j|    \\  /   \\ |      T|      T /   \\ \n",
-" |  ' /  |  T |  _  YY    Y|      ||      |Y    Y\n",
-" |    \\  |  | |  |  ||  O  |l_j  l_jl_j  l_j|  O  |\n",
-" |     Y |  | |  |  ||     |  |  |    |  |  |     |\n",
-" |  .  | j  l |  |  |l     !  |  |    |  |  l     !\n",
-" l__j\\_j|____jl__j__j \\___/   l__j    l__j   \\___/ \n"
-};
-
-char* freakettoni[] = {
-"        __ __  __          ________ __       \n",
-"       |_ |__)|_  /\\ |_/|_/|_  |  | /  \\|\\ || \n",
-"       |  | \\ |__/--\\| \\| \\|__ |  | \\__/| \\|| \n",
-"                                        \n",
-
-};
-
+String displayText = "INIT";
 //Graphics using the defined resolution for the backbuffer
 CompositeGraphics graphics(XRES, YRES);
 //Composite output using the desired mode (PAL/NTSC) and twice the resolution. 
@@ -104,30 +71,58 @@ void compositeCore(void *data)
   }
 }
 
+void handleSerial_debug() {
+  if (Serial.available() > 0) {
+    String input = Serial.readStringUntil('\n');
+    currentScene = 'B';
+    displayText = input;
+    paramBg = 0;
+    paramSize = 0;
+    paramSpeed = 0;
+    paramShape = 1;
+    paramMulti = 1;
+}
+}
+
 void handleSerial() {
   if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n');
-    input.trim(); 
+    input.trim();
 
-    // CHANGE HERE: Now checking for exactly 6 characters (e.g., "C15304")
-    if (input.length() == 6) { 
+    if (input.length() > 0) {
+      // 1. Grab the Scene (the very first character)
+      currentScene = input.charAt(0);
       
-      // 1. Extract the Scene Letter
-      currentScene = toupper(input.charAt(0));
+      int len = input.length();
+
+      // --- SCENE B: Text + 4 trailing numbers ---
+      // Example: "BHELLO WORLD1234"
+      if (currentScene == 'B' && len > 5) {
+        // Everything from index 1 up to (length - 4)
+        displayText = input.substring(1, len - 4);
+        
+        // The last 4 characters are your parameters
+        // .charAt() returns the ASCII char, so we subtract '0' to get the actual math integer
+        paramSize  = input.charAt(len - 4) - '0';
+        paramSpeed = input.charAt(len - 3) - '0';
+        paramShape = input.charAt(len - 2) - '0';
+        paramMulti = input.charAt(len - 1) - '0';
+      } 
       
-      // 2. Extract the individual parameter digits
-      paramBg    = input.charAt(1) - '0';
-      paramSize  = input.charAt(2) - '0';
-      paramSpeed = input.charAt(3) - '0';
-      paramShape = input.charAt(4) - '0';
-      paramMulti = input.charAt(5) - '0';
-      
-      if (paramMulti < 1) paramMulti = 1; // Safety check
-      
-      Serial.println("Command parsed:");
-      Serial.println(input);
-    } else {
-      Serial.println("Error: Expected 6 characters (e.g., C06301)");
+      // --- OTHER SCENES: Just numbers after the letter ---
+      // Example: "A12345"
+      else if (len >= 6) {
+        paramBg    = input.charAt(1) - '0';
+        paramSize  = input.charAt(2) - '0';
+        paramSpeed = input.charAt(3) - '0';
+        paramShape = input.charAt(4) - '0';
+        paramMulti = input.charAt(5) - '0';
+      }
+
+      Serial.print("Scene: ");
+      Serial.println(currentScene);
+      Serial.print("Text: ");
+      Serial.println(displayText);
     }
   }
 }
@@ -140,7 +135,7 @@ void draw()
 
   // Clear the screen with the chosen background color
   graphics.begin(bgColor);
-  
+  // Serial.println(currentScene);
   switch(currentScene) {
     case 'A': 
       if (paramMulti == 0) {
@@ -153,14 +148,51 @@ void draw()
       }
       break;
 
-    // --- SCENE B: Split Screens ---
-    case 'B':
-      if (paramMulti == 1) {
-        // B0001: Top half black (0), Bottom half white (54)
-        graphics.fillRect(0, YRES/2, XRES, YRES/2, 54);
+
+    // --- SCENE B: CASCADING TEXT ---
+    case 'B': {
+      // 1. Map the Parameters
+      int numLines = paramMulti + 1; // Number of lines visible at once (1 to 10)
+      float cascadeSpeed = (paramSpeed + 1) * 0.05; // How fast the cascade drops
+      
+      // Determine row height based on size parameter
+      int rowHeight = (paramSize > 4) ? 16 : 8; 
+      int totalRows = YRES / rowHeight; 
+
+      // 2. Calculate the Cascade Position
+      static float virtualRow = 0; 
+      virtualRow += cascadeSpeed; 
+      int headRow = (int)virtualRow % totalRows; 
+
+      // 3. Draw the Visible Lines
+      for (int i = 0; i < numLines; i++) {
+        int drawRow = headRow - i;
+        if (drawRow < 0) {
+          drawRow += totalRows;
+        }
+
+        int yPos = drawRow * rowHeight;
+
+        // 4. Color Math
+        // Bitluni's grayscale color maxes out at 54 (not 255)
+        int colorIntensity = (paramBg * 5) + (54 - (i * (54 / numLines))); 
+        if (colorIntensity > 54) colorIntensity = 54;
+        if (colorIntensity < 0) colorIntensity = 0;
+        
+        // 5. Library-Specific Drawing
+        // Set the color and cursor position FIRST
+        graphics.setTextColor(colorIntensity);
+        graphics.setCursor(10, yPos);
+
+        // Print the text (casting the Arduino String to the required char*)
+        if (paramSize > 4) {
+          graphics.printBig((char*)displayText.c_str());
+        } else {
+          graphics.print((char*)displayText.c_str());
+        }
       }
       break;
-
+    }
     // --- SCENE C: 3D WIREFRAMES ---
     case 'C': {
       static float angle = 0; 
@@ -195,6 +227,7 @@ void draw()
         switch(paramShape) {
           case 0: graphics.drawWireframeCube(angle, angle * 0.8, angle * 1.2, cx, cy, actualSize, fgColor); break;
           case 1: graphics.drawWireframePyramid(angle, angle * 0.8, angle * 1.2, cx, cy, actualSize, fgColor); break;
+          case 2: graphics.drawWireFrameSphere(angle, angle * 0.8, angle * 1.2, cx, cy, actualSize, fgColor); break;
         }
       }
 
@@ -219,6 +252,132 @@ void draw()
       }
       break;
     }
+    // --- SCENE D: TUNNEL LINES ---
+    case 'D': {
+      // 1. Map the Pure Data parameters
+      int numPairs = 2 + paramSize;              // Density: 2 to 11 pairs of lines
+      float speed = (paramSpeed + 1) * 0.005;    // Animation speed
+      float baseAngle = (paramShape / 10.0) * PI; // Angle: 0 to 180 degrees
+      int lineThickness = paramMulti;            // Width of the lines: 1 to 9 pixels
+
+      // 2. Advance a continuous time counter
+      static float tunnelTime = 0;
+      tunnelTime += speed;
+
+      // Calculate the normal vector (perpendicular) and direction vector (the line itself)
+      float nx = cos(baseAngle);
+      float ny = sin(baseAngle);
+      float dx = -sin(baseAngle);
+      float dy = cos(baseAngle);
+
+      int L = 400; // Large length to ensure the lines always reach off-screen
+      int cx = XRES / 2;
+      int cy = YRES / 2;
+
+      // 3. Draw the tunnel
+      for (int i = 0; i < numPairs; i++) {
+        // Phase offsets each pair so they are evenly spaced in the tunnel
+        float phase = (float)i / numPairs;
+        
+        // current_t loops continuously from 0.0 to 1.0 over time
+        float current_t = fmod(tunnelTime + phase, 1.0f);
+        
+        // Exponential distance creates 3D perspective acceleration
+        float d = 1.0f * pow(350.0f, current_t);
+
+        // Calculate the base center points for this specific pair of lines
+        float px1 = cx + (d * nx);
+        float py1 = cy + (d * ny);
+        float px2 = cx - (d * nx);
+        float py2 = cy - (d * ny);
+
+        // --- THE THICKNESS LOOP ---
+        // Draw the line multiple times, nudged slightly along the normal vector (nx, ny)
+        int halfThick = lineThickness / 2;
+        int evenOffset = (lineThickness % 2 == 0) ? 1 : 0; // Adjusts centering for even numbers
+        
+        for (int w = -halfThick; w <= halfThick - evenOffset; w++) {
+           
+           // Calculate the tiny 1-pixel nudges
+           int offsetX = (int)(w * nx);
+           int offsetY = (int)(w * ny);
+           
+           // Draw Thick Line 1 (Positive side of the center)
+           graphics.line((int)(px1 - L*dx) + offsetX, (int)(py1 - L*dy) + offsetY, 
+                         (int)(px1 + L*dx) + offsetX, (int)(py1 + L*dy) + offsetY, fgColor);
+
+           // Draw Thick Line 2 (Negative side of the center)
+           graphics.line((int)(px2 - L*dx) + offsetX, (int)(py2 - L*dy) + offsetY, 
+                         (int)(px2 + L*dx) + offsetX, (int)(py2 + L*dy) + offsetY, fgColor);
+        }
+      }
+      break;
+    }
+    // --- SCENE E: WARP SPEED STARFIELD ---
+    // --- SCENE E: WARP SPEED STARFIELD ---
+    case 'E': {
+      const int MAX_STARS = 100;
+      static float starsX[MAX_STARS];
+      static float starsY[MAX_STARS];
+      static float starsZ[MAX_STARS];
+      static bool starsInit = false;
+
+      if (!starsInit) {
+        for (int i = 0; i < MAX_STARS; i++) {
+          starsX[i] = random(-500, 500);
+          starsY[i] = random(-500, 500);
+          starsZ[i] = random(10, 200); 
+        }
+        starsInit = true;
+      }
+
+      int numStars = map(paramMulti, 1, 9, 10, MAX_STARS); 
+      float speed = (paramSpeed + 1) * 0.5;                
+      float maxSize = paramSize + 1.0;                     
+      
+      static float tunnelRot = 0;
+      tunnelRot += (paramShape - 4.5) * 0.01; 
+      float cosR = cos(tunnelRot);
+      float sinR = sin(tunnelRot);
+
+      int cx = XRES / 2;
+      int cy = YRES / 2;
+
+      for (int i = 0; i < numStars; i++) {
+        starsZ[i] -= speed;
+
+        if (starsZ[i] <= 1.0) {
+          starsX[i] = random(-500, 500);
+          starsY[i] = random(-500, 500);
+          starsZ[i] = 200.0;
+        }
+
+        float rx = starsX[i] * cosR - starsY[i] * sinR;
+        float ry = starsX[i] * sinR + starsY[i] * cosR;
+
+        float projX = (rx / starsZ[i]) * 100.0 + cx;
+        float projY = (ry / starsZ[i]) * 100.0 + cy;
+
+        if (projX < 0 || projX >= XRES || projY < 0 || projY >= YRES) {
+          starsX[i] = random(-500, 500);
+          starsY[i] = random(-500, 500);
+          starsZ[i] = 200.0;
+          continue; 
+        }
+
+        float currentSize = maxSize * (1.0 - (starsZ[i] / 200.0));
+        if (currentSize < 1.0) currentSize = 1.0; 
+        int s = (int)currentSize;
+
+        int drawX = (int)projX - (s / 2);
+        int drawY = (int)projY - (s / 2);
+
+        // Look how much cleaner this is using the native library!
+        // fgColor should be whatever your standard drawing color variable is
+        graphics.fillRect(drawX, drawY, s, s, fgColor);
+      }
+      break;
+    }
     default:
       graphics.setCursor(10, 10);
       graphics.setTextColor(fgColor, bgColor);
@@ -231,7 +390,9 @@ void draw()
 void loop()
 {
   // Check for serial input every loop
+  // handleSerial_debug();
   handleSerial();
+  // Serial.println(currentScene);
   // Draw the graphics
   draw();
 }
