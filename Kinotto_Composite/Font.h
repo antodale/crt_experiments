@@ -15,17 +15,28 @@ class Font
   {
   }
 
-  void drawCharBig(Graphics &g, int x, int y, char ch, int frontColor, int backColor)
+void drawCharBig(Graphics &g, int x, int y, char ch, int frontColor, int backColor, int dimension)
+{
+  // Grab the specific letter from the font array
+  const unsigned char *pix = &pixels[xres * yres * (ch - 32)];
+  
+  for(int py = 0; py < yres; py++)
   {
-    const unsigned char *pix = &pixels[xres * yres * (ch - 32)];
-    for(int py = 0; py < yres; py++)
-      for(int px = 0; px < xres; px++)
-        if(*(pix++))
-          g.dot(2*px + 2*x, 2*py + 2*y, frontColor);
-        else
-        if(backColor >= 0)
-          g.dot(px + x, py + y, backColor);
+    for(int px = 0; px < xres; px++)
+    {
+      if(*(pix++))
+      {
+        // Draw a solid square block for the foreground pixel
+        g.fillRect(x + (px * dimension), y + (py * dimension), dimension, dimension, frontColor);
+      }
+      else if(backColor >= 0)
+      {
+        // Draw a solid square block for the background pixel
+        g.fillRect(x + (px * dimension), y + (py * dimension), dimension, dimension, backColor);
+      }
+    }
   }
+}
 
   void drawChar(Graphics &g, int x, int y, char ch, int frontColor, int backColor)
   {

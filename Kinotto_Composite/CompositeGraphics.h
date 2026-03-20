@@ -81,22 +81,30 @@ class CompositeGraphics
     }
   }
 
-  void printBig(char *str)
+void printBig(char *str, int dimension)
+{
+  if(!font) return;
+  while(*str)
   {
-    if(!font) return;
-    while(*str)
+    if(*str >= 32 && *str < 128)
     {
-      if(*str >= 32 && *str < 128)
-        font->drawCharBig(*this, cursorX, cursorY, *str, frontColor, backColor);
-      cursorX += font->xres;
-      if(cursorX + font->xres > xres || *str == '\n')
-      {
-        cursorX = cursorBaseX;
-        cursorY += font->yres;        
-      }
-      str++;
+      // We pass 'dimension' down to the font drawing function
+      font->drawCharBig(*this, cursorX, cursorY, *str, frontColor, backColor, dimension);
     }
+    
+    // Multiply the cursor jump by the new dimension
+    cursorX += (font->xres * dimension);
+    
+    // Check if the NEXT character will run off the screen, scaled by dimension
+    if(cursorX + (font->xres * dimension) > xres || *str == '\n')
+    {
+      cursorX = cursorBaseX;
+      // Multiply the line break drop by the new dimension
+      cursorY += (font->yres * dimension);        
+    }
+    str++;
   }
+}
 
   void print(int number, int base = 10, int minCharacters = 1)
   {
